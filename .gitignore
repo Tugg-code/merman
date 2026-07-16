@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Local IDE/editor state
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and captured telemetry
+*.csv
+logs/
+telemetry_logs/
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Arduino build/cache outputs
+build/
+*.elf
+*.bin
+*.hex
+*.map
+
