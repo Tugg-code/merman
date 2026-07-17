@@ -129,7 +129,7 @@ int16_t readGyroRaw() {
     mpuOk = false;
     return 0;
   }
-  Wire.requestFrom(MPU_ADDR, (byte)2);
+  Wire.requestFrom(mpuAddr, (byte)2);
   if (Wire.available() < 2) {
     mpuOk = false;
     return 0;
