@@ -306,13 +306,24 @@ void sendTelemetry() {
 
 void setup() {
   Serial.begin(115200);
-  delay(250);
+  delay(1500);
+
+  Serial.println();
+  Serial.println("Merman ESP32-S3 stabilizer starting");
+  Serial.print("I2C SDA GPIO "); Serial.println(I2C_SDA_PIN);
+  Serial.print("I2C SCL GPIO "); Serial.println(I2C_SCL_PIN);
+  Serial.print("Servo GPIO "); Serial.println(SERVO_PIN);
 
   analogReadResolution(12);
 
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   Wire.setClock(400000);
   mpuOk = detectMpu();
+  Serial.print("MPU detected: "); Serial.println(mpuOk ? "YES" : "NO");
+  if (mpuOk) {
+    Serial.print("MPU address: 0x");
+    Serial.println(mpuAddr, HEX);
+  }
   if (mpuOk) {
     writeRegister(0x6B, 0x00); // Wake MPU6050.
     writeRegister(0x1B, 0x00); // Gyro range: +/-250 deg/s.
