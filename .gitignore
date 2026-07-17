@@ -16,6 +16,7 @@ env/
 *.csv
 logs/
 telemetry_logs/
+outputs/
 
 # OS cruft
 .DS_Store
@@ -28,3 +29,6 @@ build/
 *.hex
 *.map
 
+# PyInstaller/local packaged builds
+dist/
+*.spec
