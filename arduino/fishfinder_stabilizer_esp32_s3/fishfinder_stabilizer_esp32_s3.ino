@@ -13,8 +13,7 @@
     - Servo supply ground, ESP32 ground, and MPU6050 ground must all be tied
       together.
     - Do not power the big servo from the ESP32 board.
-    - Joystick control is intentionally disabled for this release. Manual
-      movement comes from the GUI using JOG LEFT / JOG RIGHT / JOG STOP.
+    - Manual movement comes from the GUI using JOG LEFT / JOG RIGHT / JOG STOP.
 */
 
 #include <Arduino.h>
@@ -29,9 +28,6 @@
 // If your board labels different ADC/I2C pins, change them here only.
 const int I2C_SDA_PIN = 8;
 const int I2C_SCL_PIN = 9;
-const int JOY_X_PIN = 1;       // Reserved/optional; not used for control.
-const int JOY_Y_PIN = 2;       // Reserved/optional; not used for control.
-const int JOY_SW_PIN = 5;      // Reserved/optional; not used for control.
 const int SERVO_PIN = 4;       // Servo signal only; servo power is separate.
 
 // If the MPU6050 is lying flat, boat/base heading changes are usually gyro Z.
@@ -72,8 +68,7 @@ float fixedYaw = 0.0;
 float fixedServo = 90.0;
 float errorAngle = 0.0;
 bool atLimit = false;
-int joyX = 2048;
-int joyY = 2048;
+bool mpuOk = false;
 int manualJogDirection = 0;     // -1 = left, 0 = stopped, +1 = right.
 
 unsigned long lastControlMs = 0;
@@ -95,7 +90,12 @@ void writeRegister(byte reg, byte value) {
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(reg);
   Wire.write(value);
-  Wire.endTransmission();
+  mpuOk = (Wire.endTransmission() == 0);
+}
+
+bool pingMpu() {
+  Wire.beginTransmission(MPU_ADDR);
+  return Wire.endTransmission() == 0;
 }
 
 byte gyroHighRegisterForAxis() {
@@ -107,9 +107,16 @@ byte gyroHighRegisterForAxis() {
 int16_t readGyroRaw() {
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(gyroHighRegisterForAxis());
-  Wire.endTransmission(false);
+  if (Wire.endTransmission(false) != 0) {
+    mpuOk = false;
+    return 0;
+  }
   Wire.requestFrom(MPU_ADDR, (byte)2);
-  if (Wire.available() < 2) return 0;
+  if (Wire.available() < 2) {
+    mpuOk = false;
+    return 0;
+  }
+  mpuOk = true;
   return (int16_t)(Wire.read() << 8 | Wire.read());
 }
 
@@ -212,11 +219,6 @@ void readSerialCommands() {
 }
 
 void updateControl(float dt) {
-  // Joystick control is disabled for this release. Keep neutral telemetry
-  // values so older GUI fields and CSV logs stay compatible.
-  joyX = 2048;
-  joyY = 2048;
-
   // At +/-250 deg/s sensitivity the MPU6050 produces 131 LSB per deg/s.
   yawRate = readGyroRaw() / 131.0 - gyroTrim;
   yaw += yawRate * dt;
@@ -270,8 +272,7 @@ void updateControl(float dt) {
 void sendTelemetry() {
   Serial.print("{\"yaw\":"); Serial.print(yaw, 2);
   Serial.print(",\"yaw_rate\":"); Serial.print(yawRate, 2);
-  Serial.print(",\"joy_x\":"); Serial.print(joyX);
-  Serial.print(",\"joy_y\":"); Serial.print(joyY);
+  Serial.print(",\"mpu_ok\":"); Serial.print(mpuOk ? "true" : "false");
   Serial.print(",\"servo\":"); Serial.print(servoAngle, 1);
   Serial.print(",\"target\":"); Serial.print(fixedYaw, 2);
   Serial.print(",\"error\":"); Serial.print(errorAngle, 2);
@@ -292,6 +293,7 @@ void setup() {
 
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   Wire.setClock(400000);
+  mpuOk = pingMpu();
   writeRegister(0x6B, 0x00); // Wake MPU6050.
   writeRegister(0x1B, 0x00); // Gyro range: +/-250 deg/s.
 
@@ -299,7 +301,9 @@ void setup() {
   setServo(90.0);
 
   delay(250);
-  gyroTrim = calibrateGyro(); // Initial stationary gyro bias removal.
+  if (mpuOk) {
+    gyroTrim = calibrateGyro(); // Initial stationary gyro bias removal.
+  }
   lastControlMs = millis();
 }
 

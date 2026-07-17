@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import csv
 from datetime import datetime
+import logging
 from pathlib import Path
 import queue
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -13,6 +15,14 @@ from config import APP_TITLE, DEFAULT_BAUD
 from plot_panel import PlotPanel
 from serial_interface import SerialInterface, available_ports
 from telemetry import Telemetry
+
+LOG_PATH = Path.home() / "Desktop" / "Merman Stabilizer Test Build" / "gui_error.log"
+LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+logging.basicConfig(
+    filename=LOG_PATH,
+    level=logging.ERROR,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
 
 
 class StabilizerApp(tk.Tk):
@@ -23,9 +33,12 @@ class StabilizerApp(tk.Tk):
         self.title(APP_TITLE)
         self.minsize(1100, 700)
         self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.report_callback_exception = self._handle_callback_exception
 
         self.serial = SerialInterface()
         self.latest: Telemetry | None = None
+        self.connected_at: float | None = None
+        self.no_telemetry_warning_shown = False
         self.logging = False
         self.log_file = None
         self.log_writer: csv.DictWriter | None = None
@@ -43,8 +56,7 @@ class StabilizerApp(tk.Tk):
             for key in (
                 "yaw",
                 "yaw_rate",
-                "joy_x",
-                "joy_y",
+                "mpu_ok",
                 "servo",
                 "target",
                 "error",
@@ -137,13 +149,13 @@ class StabilizerApp(tk.Tk):
         controls.columnconfigure((0, 1, 2), weight=1)
         controls.rowconfigure((0, 1, 2), weight=1)
 
-        left = ttk.Button(controls, text="◀ LEFT")
+        left = ttk.Button(controls, text="< LEFT")
         left.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
         left.bind("<ButtonPress-1>", lambda _event: self.send("JOG LEFT"))
         left.bind("<ButtonRelease-1>", lambda _event: self.send("JOG STOP"))
         left.bind("<Leave>", lambda _event: self.send("JOG STOP"))
 
-        right = ttk.Button(controls, text="RIGHT ▶")
+        right = ttk.Button(controls, text="RIGHT >")
         right.grid(row=0, column=2, sticky="nsew", padx=8, pady=8)
         right.bind("<ButtonPress-1>", lambda _event: self.send("JOG RIGHT"))
         right.bind("<ButtonRelease-1>", lambda _event: self.send("JOG STOP"))
@@ -194,8 +206,7 @@ class StabilizerApp(tk.Tk):
         labels = [
             ("Yaw angle", "yaw"),
             ("Yaw rate", "yaw_rate"),
-            ("Joystick X", "joy_x"),
-            ("Joystick Y", "joy_y"),
+            ("MPU6050", "mpu_ok"),
             ("Servo command", "servo"),
             ("Target / fixed", "target"),
             ("Error angle", "error"),
@@ -300,12 +311,18 @@ class StabilizerApp(tk.Tk):
         if self.serial.connected:
             self.serial.disconnect()
             self.status_var.set("Disconnected")
+            self.latest = None
+            self.connected_at = None
+            self.no_telemetry_warning_shown = False
             self._set_connect_buttons("Connect")
             return
         try:
             baud = int(self.baud_var.get())
+            self.latest = None
             self.serial.connect(self.port_var.get(), baud)
             self.status_var.set(f"Connected: {self.port_var.get()} at {baud}")
+            self.connected_at = time.monotonic()
+            self.no_telemetry_warning_shown = False
             self._set_connect_buttons("Disconnect")
         except Exception as exc:
             self.status_var.set(f"Connection failed: {exc}")
@@ -317,8 +334,9 @@ class StabilizerApp(tk.Tk):
     def send(self, command: str) -> None:
         try:
             self.serial.send_command(command)
-        except RuntimeError as exc:
-            messagebox.showwarning(APP_TITLE, str(exc))
+        except Exception as exc:
+            self.status_var.set(str(exc))
+            logging.exception("Command failed: %s", command)
 
     def apply_tuning(self, command: str) -> None:
         if command == "SET LIMITS":
@@ -354,7 +372,26 @@ class StabilizerApp(tk.Tk):
                 break
             self.status_var.set(error)
             self.serial.disconnect()
+            self.connected_at = None
             self._set_connect_buttons("Connect")
+        while True:
+            try:
+                status = self.serial.status_queue.get_nowait()
+            except queue.Empty:
+                break
+            self.status_var.set(status)
+        if (
+            self.serial.connected
+            and self.latest is None
+            and self.connected_at is not None
+            and not self.no_telemetry_warning_shown
+            and time.monotonic() - self.connected_at > 3.0
+        ):
+            self.no_telemetry_warning_shown = True
+            self.status_var.set(
+                "Connected, but no JSON telemetry yet. Upload the full ESP32 stabilizer sketch, "
+                "close Arduino Serial Monitor, then press RESET on the ESP32."
+            )
         if changed:
             self.plot.redraw()
         self.after(50, self.poll_serial)
@@ -364,8 +401,7 @@ class StabilizerApp(tk.Tk):
         formatted = {
             "yaw": f"{sample.yaw:.2f} deg",
             "yaw_rate": f"{sample.yaw_rate:.2f} deg/s",
-            "joy_x": str(sample.joy_x),
-            "joy_y": str(sample.joy_y),
+            "mpu_ok": "OK" if sample.mpu_ok else "NOT FOUND",
             "servo": f"{sample.servo:.1f} deg",
             "target": f"{sample.target:.2f} deg",
             "error": f"{sample.error:.2f} deg",
@@ -378,7 +414,8 @@ class StabilizerApp(tk.Tk):
 
         self.simple_summary_var.set(
             f"Servo {sample.servo:.1f} deg   |   Yaw {sample.yaw:.1f} deg   |   "
-            f"Error {sample.error:.1f} deg   |   Limit: {'YES' if sample.limit else 'OK'}"
+            f"MPU: {'OK' if sample.mpu_ok else 'NOT FOUND'}   |   "
+            f"Limit: {'YES' if sample.limit else 'OK'}"
         )
 
         self.plot.append(sample)
@@ -423,8 +460,12 @@ class StabilizerApp(tk.Tk):
         if self.serial.connected:
             try:
                 self.serial.send_command("JOG STOP")
-            except RuntimeError:
+            except Exception:
                 pass
+
+    def _handle_callback_exception(self, exc_type: type[BaseException], exc: BaseException, tb: object) -> None:
+        logging.exception("Unhandled GUI callback exception", exc_info=(exc_type, exc, tb))
+        self.status_var.set(f"GUI error logged to {LOG_PATH}")
 
 
 if __name__ == "__main__":

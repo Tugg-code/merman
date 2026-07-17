@@ -13,13 +13,12 @@ class Telemetry:
     timestamp: float
     yaw: float = 0.0
     yaw_rate: float = 0.0
-    joy_x: int = 0
-    joy_y: int = 0
     servo: float = 90.0
     target: float = 0.0
     error: float = 0.0
     mode: str = "UNKNOWN"
     limit: bool = False
+    mpu_ok: bool = False
     kp: float = 0.0
     deadband: float = 0.0
     manual_speed: float = 0.0
@@ -33,13 +32,12 @@ class Telemetry:
             timestamp=time.time(),
             yaw=float(data.get("yaw", 0.0)),
             yaw_rate=float(data.get("yaw_rate", 0.0)),
-            joy_x=int(data.get("joy_x", 0)),
-            joy_y=int(data.get("joy_y", 0)),
             servo=float(data.get("servo", 90.0)),
             target=float(data.get("target", 0.0)),
             error=float(data.get("error", 0.0)),
             mode=str(data.get("mode", "UNKNOWN")),
             limit=bool(data.get("limit", False)),
+            mpu_ok=bool(data.get("mpu_ok", False)),
             kp=float(data.get("kp", 0.0)),
             deadband=float(data.get("deadband", 0.0)),
             manual_speed=float(data.get("manual_speed", 0.0)),
@@ -55,9 +53,8 @@ class Telemetry:
             "target": self.target,
             "error": self.error,
             "mode": self.mode,
-            "joy_x": self.joy_x,
-            "joy_y": self.joy_y,
             "limit": self.limit,
+            "mpu_ok": self.mpu_ok,
             "kp": self.kp,
             "deadband": self.deadband,
             "manual_speed": self.manual_speed,

@@ -25,6 +25,8 @@ class SerialInterface:
         self._stop_event = threading.Event()
         self.telemetry_queue: queue.Queue[Telemetry] = queue.Queue(TELEMETRY_QUEUE_SIZE)
         self.error_queue: queue.Queue[str] = queue.Queue()
+        self.status_queue: queue.Queue[str] = queue.Queue()
+        self._malformed_count = 0
 
     @property
     def connected(self) -> bool:
@@ -32,6 +34,7 @@ class SerialInterface:
 
     def connect(self, port: str, baudrate: int) -> None:
         self.disconnect()
+        self._malformed_count = 0
         self._serial = serial.Serial(port, baudrate, timeout=SERIAL_TIMEOUT_SECONDS)
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._read_loop, daemon=True)
@@ -52,7 +55,10 @@ class SerialInterface:
     def send_command(self, command: str) -> None:
         if not self.connected or self._serial is None:
             raise RuntimeError("Not connected to an Arduino.")
-        self._serial.write((command.strip() + "\n").encode("ascii"))
+        try:
+            self._serial.write((command.strip() + "\n").encode("ascii"))
+        except (serial.SerialException, OSError) as exc:
+            raise RuntimeError(f"Could not send command: {exc}") from exc
 
     def _read_loop(self) -> None:
         while not self._stop_event.is_set() and self.connected:
@@ -74,6 +80,13 @@ class SerialInterface:
                 self.error_queue.put(f"Serial connection lost: {exc}")
                 break
             except ValueError:
-                # Ignore startup messages or malformed lines while the board resets.
+                # Startup banners from smoke/sweep sketches are useful clues
+                # when the GUI connects but no telemetry appears.
+                self._malformed_count += 1
+                if self._malformed_count <= 3:
+                    preview = raw[:100]
+                    self.status_queue.put(
+                        "Received non-telemetry serial text. "
+                        f"Is the full stabilizer sketch uploaded? Text: {preview}"
+                    )
                 continue
-
