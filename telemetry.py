@@ -19,6 +19,7 @@ class Telemetry:
     mode: str = "UNKNOWN"
     limit: bool = False
     mpu_ok: bool = False
+    mpu_addr: int = 0
     kp: float = 0.0
     deadband: float = 0.0
     manual_speed: float = 0.0
@@ -38,6 +39,7 @@ class Telemetry:
             mode=str(data.get("mode", "UNKNOWN")),
             limit=bool(data.get("limit", False)),
             mpu_ok=bool(data.get("mpu_ok", False)),
+            mpu_addr=int(data.get("mpu_addr", 0)),
             kp=float(data.get("kp", 0.0)),
             deadband=float(data.get("deadband", 0.0)),
             manual_speed=float(data.get("manual_speed", 0.0)),
@@ -55,6 +57,7 @@ class Telemetry:
             "mode": self.mode,
             "limit": self.limit,
             "mpu_ok": self.mpu_ok,
+            "mpu_addr": self.mpu_addr,
             "kp": self.kp,
             "deadband": self.deadband,
             "manual_speed": self.manual_speed,

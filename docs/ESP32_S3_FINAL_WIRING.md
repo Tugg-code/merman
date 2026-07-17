@@ -41,6 +41,8 @@ NUDGE LEFT
 NUDGE RIGHT
 ```
 
+The firmware now auto-detects the MPU6050 address at either `0x68` or `0x69`.
+
 ## MPU6050 wiring
 
 | MPU6050 pin | ESP32-S3 connection |
@@ -107,9 +109,26 @@ UBEC + ------------------------> Power, red
 
 1. Upload `arduino/esp32_s3_smoke_test/esp32_s3_smoke_test.ino`.
 2. Confirm Serial Monitor prints at 115200 baud.
-3. Upload `arduino/esp32_s3_servo_sweep_test/esp32_s3_servo_sweep_test.ino`.
-4. Confirm servo moves between 1000 us, 1500 us, and 2000 us.
-5. Upload `arduino/fishfinder_stabilizer_esp32_s3/fishfinder_stabilizer_esp32_s3.ino`.
-6. Run `python main.py`.
-7. Connect to the ESP32 COM port.
-8. Use Simple tester mode: LEFT, RIGHT, LOCK TARGET, UNLOCK, RESET SERVO.
+3. If the MPU is not detected, upload `arduino/esp32_s3_i2c_scanner/esp32_s3_i2c_scanner.ino`.
+4. Open Serial Monitor at 115200 baud and test which SDA/SCL pin pair finds address `0x68` or `0x69`.
+5. If a different pin pair works, update `I2C_SDA_PIN` and `I2C_SCL_PIN` in the full firmware.
+6. Upload `arduino/esp32_s3_servo_sweep_test/esp32_s3_servo_sweep_test.ino`.
+7. Confirm servo moves between 1000 us, 1500 us, and 2000 us.
+8. Upload `arduino/fishfinder_stabilizer_esp32_s3/fishfinder_stabilizer_esp32_s3.ino`.
+9. Run `python main.py`.
+10. Connect to the ESP32 COM port.
+11. Use Simple tester mode: LEFT, RIGHT, LOCK TARGET, UNLOCK, RESET SERVO.
+
+## Alternate I2C pins
+
+The scanner currently checks these pairs:
+
+| SDA | SCL | Notes |
+| --- | --- | --- |
+| GPIO 8 | GPIO 9 | Current firmware default |
+| GPIO 1 | GPIO 2 | Good next pair to try because joystick is disabled |
+| GPIO 6 | GPIO 7 | Alternate pair |
+| GPIO 15 | GPIO 16 | Alternate pair |
+| GPIO 17 | GPIO 18 | Alternate pair |
+
+Only one pair should be wired at a time.

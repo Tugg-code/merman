@@ -57,6 +57,7 @@ class StabilizerApp(tk.Tk):
                 "yaw",
                 "yaw_rate",
                 "mpu_ok",
+                "mpu_addr",
                 "servo",
                 "target",
                 "error",
@@ -207,6 +208,7 @@ class StabilizerApp(tk.Tk):
             ("Yaw angle", "yaw"),
             ("Yaw rate", "yaw_rate"),
             ("MPU6050", "mpu_ok"),
+            ("MPU address", "mpu_addr"),
             ("Servo command", "servo"),
             ("Target / fixed", "target"),
             ("Error angle", "error"),
@@ -402,6 +404,7 @@ class StabilizerApp(tk.Tk):
             "yaw": f"{sample.yaw:.2f} deg",
             "yaw_rate": f"{sample.yaw_rate:.2f} deg/s",
             "mpu_ok": "OK" if sample.mpu_ok else "NOT FOUND",
+            "mpu_addr": f"0x{sample.mpu_addr:02X}" if sample.mpu_addr else "--",
             "servo": f"{sample.servo:.1f} deg",
             "target": f"{sample.target:.2f} deg",
             "error": f"{sample.error:.2f} deg",
@@ -414,7 +417,8 @@ class StabilizerApp(tk.Tk):
 
         self.simple_summary_var.set(
             f"Servo {sample.servo:.1f} deg   |   Yaw {sample.yaw:.1f} deg   |   "
-            f"MPU: {'OK' if sample.mpu_ok else 'NOT FOUND'}   |   "
+            f"MPU: {'OK' if sample.mpu_ok else 'NOT FOUND'}"
+            f"{f' 0x{sample.mpu_addr:02X}' if sample.mpu_addr else ''}   |   "
             f"Limit: {'YES' if sample.limit else 'OK'}"
         )
 

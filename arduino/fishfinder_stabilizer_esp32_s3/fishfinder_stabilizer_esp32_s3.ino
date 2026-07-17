@@ -35,7 +35,7 @@ const int SERVO_PIN = 4;       // Servo signal only; servo power is separate.
 // this one letter to 'X' or 'Y'.
 const char YAW_AXIS = 'Z';
 
-const byte MPU_ADDR = 0x68;
+byte mpuAddr = 0x68;
 
 // ------------------------- Servo PWM -------------------------
 // DS3245-style servos commonly accept 500-2500 us pulses, but if your servo
@@ -87,15 +87,28 @@ const char *modeName() {
 }
 
 void writeRegister(byte reg, byte value) {
-  Wire.beginTransmission(MPU_ADDR);
+  Wire.beginTransmission(mpuAddr);
   Wire.write(reg);
   Wire.write(value);
   mpuOk = (Wire.endTransmission() == 0);
 }
 
-bool pingMpu() {
-  Wire.beginTransmission(MPU_ADDR);
+bool pingAddress(byte address) {
+  Wire.beginTransmission(address);
   return Wire.endTransmission() == 0;
+}
+
+bool detectMpu() {
+  if (pingAddress(0x68)) {
+    mpuAddr = 0x68;
+    return true;
+  }
+  if (pingAddress(0x69)) {
+    mpuAddr = 0x69;
+    return true;
+  }
+  mpuAddr = 0x00;
+  return false;
 }
 
 byte gyroHighRegisterForAxis() {
@@ -105,7 +118,12 @@ byte gyroHighRegisterForAxis() {
 }
 
 int16_t readGyroRaw() {
-  Wire.beginTransmission(MPU_ADDR);
+  if (!mpuOk) {
+    mpuOk = detectMpu();
+    if (!mpuOk) return 0;
+  }
+
+  Wire.beginTransmission(mpuAddr);
   Wire.write(gyroHighRegisterForAxis());
   if (Wire.endTransmission(false) != 0) {
     mpuOk = false;
@@ -273,6 +291,7 @@ void sendTelemetry() {
   Serial.print("{\"yaw\":"); Serial.print(yaw, 2);
   Serial.print(",\"yaw_rate\":"); Serial.print(yawRate, 2);
   Serial.print(",\"mpu_ok\":"); Serial.print(mpuOk ? "true" : "false");
+  Serial.print(",\"mpu_addr\":"); Serial.print(mpuAddr);
   Serial.print(",\"servo\":"); Serial.print(servoAngle, 1);
   Serial.print(",\"target\":"); Serial.print(fixedYaw, 2);
   Serial.print(",\"error\":"); Serial.print(errorAngle, 2);
@@ -293,9 +312,11 @@ void setup() {
 
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   Wire.setClock(400000);
-  mpuOk = pingMpu();
-  writeRegister(0x6B, 0x00); // Wake MPU6050.
-  writeRegister(0x1B, 0x00); // Gyro range: +/-250 deg/s.
+  mpuOk = detectMpu();
+  if (mpuOk) {
+    writeRegister(0x6B, 0x00); // Wake MPU6050.
+    writeRegister(0x1B, 0x00); // Gyro range: +/-250 deg/s.
+  }
 
   setupServoPwm();
   setServo(90.0);
