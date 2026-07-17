@@ -24,8 +24,8 @@ These are the defaults in `arduino/fishfinder_stabilizer_esp32_s3/fishfinder_sta
 
 | Function | ESP32-S3 GPIO | Notes |
 | --- | --- | --- |
-| MPU6050 SDA | GPIO 8 | I2C data |
-| MPU6050 SCL | GPIO 9 | I2C clock |
+| MPU6050 SDA | GPIO 1 | I2C data |
+| MPU6050 SCL | GPIO 2 | I2C clock |
 | Servo signal | GPIO 4 | PWM signal only |
 | Joystick X | Not used | Reserved in firmware only |
 | Joystick Y | Not used | Reserved in firmware only |
@@ -49,8 +49,8 @@ The firmware now auto-detects the MPU6050 address at either `0x68` or `0x69`.
 | --- | --- |
 | VCC | `3V3` / `3.3V` |
 | GND | `GND` |
-| SDA | GPIO 8 |
-| SCL | GPIO 9 |
+| SDA | GPIO 1 |
+| SCL | GPIO 2 |
 
 Some MPU6050 breakout boards tolerate 5 V VCC, but for ESP32-S3 use 3.3 V unless the module documentation says otherwise.
 
@@ -125,8 +125,8 @@ The scanner currently checks these pairs:
 
 | SDA | SCL | Notes |
 | --- | --- | --- |
-| GPIO 8 | GPIO 9 | Current firmware default |
-| GPIO 1 | GPIO 2 | Good next pair to try because joystick is disabled |
+| GPIO 1 | GPIO 2 | Current firmware default |
+| GPIO 8 | GPIO 9 | Previous firmware default |
 | GPIO 6 | GPIO 7 | Alternate pair |
 | GPIO 15 | GPIO 16 | Alternate pair |
 | GPIO 17 | GPIO 18 | Alternate pair |

@@ -167,8 +167,8 @@ Default pin map:
 
 | Part | ESP32-S3 connection |
 | --- | --- |
-| MPU6050 SDA | GPIO 8 |
-| MPU6050 SCL | GPIO 9 |
+| MPU6050 SDA | GPIO 1 |
+| MPU6050 SCL | GPIO 2 |
 | MPU6050 VCC | 3.3 V recommended |
 | MPU6050 GND | GND |
 | Joystick VRx | Not used in final-test firmware |

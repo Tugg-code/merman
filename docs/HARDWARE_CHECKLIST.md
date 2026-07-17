@@ -6,8 +6,8 @@ These are the defaults in `arduino/fishfinder_stabilizer_esp32_s3/fishfinder_sta
 
 | Function | ESP32-S3 GPIO |
 | --- | --- |
-| MPU6050 SDA | GPIO 8 |
-| MPU6050 SCL | GPIO 9 |
+| MPU6050 SDA | GPIO 1 |
+| MPU6050 SCL | GPIO 2 |
 | Joystick VRx | Not used in final-test firmware |
 | Joystick VRy | Not used in final-test firmware |
 | Joystick SW | Not used in final-test firmware |

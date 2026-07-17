@@ -26,8 +26,8 @@
 // ------------------------- Pin choices -------------------------
 // These GPIOs are intentionally easy to move. ESP32-S3 dev boards vary.
 // If your board labels different ADC/I2C pins, change them here only.
-const int I2C_SDA_PIN = 8;
-const int I2C_SCL_PIN = 9;
+const int I2C_SDA_PIN = 1;
+const int I2C_SCL_PIN = 2;
 const int SERVO_PIN = 4;       // Servo signal only; servo power is separate.
 
 // If the MPU6050 is lying flat, boat/base heading changes are usually gyro Z.
