@@ -4,7 +4,7 @@ This handoff is written for a future Codex session, a future maintainer, or a ti
 
 ## Current project goal
 
-Build and test a proof-of-concept gyro-stabilized fish finder/sonar head. The head can be manually aimed with a joystick, then locked to a fixed target direction. When the base rotates, the servo rotates in the opposite direction to approximately hold the target.
+Build and test a proof-of-concept gyro-stabilized fish finder/sonar head. The head can be manually aimed from the GUI, then locked to a fixed target direction. When the base rotates, the servo rotates in the opposite direction to approximately hold the target.
 
 This is intentionally a simple bench prototype. It does not use GPS, compass, magnetometer, PID, brushless motors, or Raspberry Pi direct hardware control yet.
 
@@ -17,9 +17,9 @@ Python tkinter GUI on laptop
         v
 Microcontroller firmware
         |
-        | I2C / analog / PWM
+        | I2C / PWM
         v
-MPU6050 + joystick + servo
+MPU6050 + servo
 ```
 
 The Python GUI does not know or care whether the controller is an Arduino Uno or ESP32-S3 as long as the firmware uses the same serial protocol.
@@ -38,6 +38,7 @@ The Python GUI does not know or care whether the controller is an Arduino Uno or
 | `arduino/fishfinder_stabilizer_esp32_s3/fishfinder_stabilizer_esp32_s3.ino` | ESP32-S3 firmware |
 | `arduino/esp32_s3_smoke_test/esp32_s3_smoke_test.ino` | Minimal ESP32 upload/serial test |
 | `arduino/esp32_s3_servo_sweep_test/esp32_s3_servo_sweep_test.ino` | Minimal ESP32 servo PWM test |
+| `docs/ESP32_S3_FINAL_WIRING.md` | Final-test ESP32-S3 wiring and pinout |
 | `README.md` | Main user setup and operating instructions |
 
 ## Serial telemetry protocol
@@ -63,13 +64,18 @@ SET LIMITS 20 160
 SET MANUAL_SPEED 25
 SET MAX_ERROR 45
 SET GYRO_TRIM 0.05
+JOG LEFT
+JOG RIGHT
+JOG STOP
+NUDGE LEFT
+NUDGE RIGHT
 ```
 
 ## Control behavior
 
 Modes:
 
-- `MANUAL`: joystick X changes servo angle.
+- `MANUAL`: GUI left/right jog commands change servo angle.
 - `FIXED`: stores current yaw and servo angle, then applies opposite servo correction from gyro-integrated yaw change.
 - `DISENGAGED`: holds last servo command after a limit or max-error event.
 - `RECENTER`: moves back toward 90 degrees, then returns to manual.
@@ -98,7 +104,7 @@ The firmware applies deadband, servo min/max limits, and a correction rate limit
   - 7.4 V RC car battery
   - Buck converter for stepping battery down to 5 V
   - MPU6050
-  - Analog joystick
+  - Analog joystick, now disabled for final-test control
 
 ## Known ESP32 notes
 
@@ -111,7 +117,9 @@ The firmware applies deadband, servo min/max limits, and a correction rate limit
 
 ## Current unresolved/active bench issue
 
-The ESP32 telemetry connects and looks good in the GUI. Servo behavior is still under debug:
+The ESP32 telemetry connects and looks good in the GUI. The final-test direction disables joystick control; manual movement now comes from GUI commands.
+
+Servo behavior is still under debug:
 
 - With servo signal ground not shared, servo moves randomly. This is expected and confirms the signal is floating.
 - With the servo ground properly tied to the servo supply and ESP32 GND, the servo does not move.
@@ -133,7 +141,7 @@ If the sweep test does not move the servo:
 
 1. Verify ESP32 servo sweep test.
 2. Once servo moves, return to the ESP32 stabilizer sketch.
-3. Confirm joystick values move from low to high in GUI.
+3. Confirm Simple tester mode can command left/right motion from the GUI.
 4. Confirm `CENTER` moves servo to center.
 5. Confirm `MANUAL` moves servo.
 6. Confirm `FIX` causes opposite movement when rotating the MPU6050.
@@ -148,5 +156,4 @@ If the sweep test does not move the servo:
 - Raspberry Pi direct servo/I2C control
 - Automatic target tracking
 
-Those are later architecture decisions. The current job is to make the simple gyro-rate, servo, joystick loop reliable.
-
+Those are later architecture decisions. The current job is to make the simple gyro-rate, servo, and GUI-commanded manual-control loop reliable.

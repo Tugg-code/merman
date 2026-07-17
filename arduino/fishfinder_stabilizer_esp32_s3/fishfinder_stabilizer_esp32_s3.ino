@@ -10,9 +10,11 @@
   Important power note:
     - The DS3245 / 45 kg servo must have its own high-current 5-6 V supply.
     - The ESP32-S3 can be powered from USB during bench testing.
-    - Servo supply ground, ESP32 ground, joystick ground, and MPU6050 ground
-      must all be tied together.
+    - Servo supply ground, ESP32 ground, and MPU6050 ground must all be tied
+      together.
     - Do not power the big servo from the ESP32 board.
+    - Joystick control is intentionally disabled for this release. Manual
+      movement comes from the GUI using JOG LEFT / JOG RIGHT / JOG STOP.
 */
 
 #include <Arduino.h>
@@ -27,9 +29,9 @@
 // If your board labels different ADC/I2C pins, change them here only.
 const int I2C_SDA_PIN = 8;
 const int I2C_SCL_PIN = 9;
-const int JOY_X_PIN = 1;       // ADC-capable GPIO.
-const int JOY_Y_PIN = 2;       // ADC-capable GPIO; telemetry only for now.
-const int JOY_SW_PIN = 5;      // Optional joystick switch, active low.
+const int JOY_X_PIN = 1;       // Reserved/optional; not used for control.
+const int JOY_Y_PIN = 2;       // Reserved/optional; not used for control.
+const int JOY_SW_PIN = 5;      // Reserved/optional; not used for control.
 const int SERVO_PIN = 4;       // Servo signal only; servo power is separate.
 
 // If the MPU6050 is lying flat, boat/base heading changes are usually gyro Z.
@@ -55,12 +57,13 @@ Mode mode = MANUAL;
 // Tunable values. The Python GUI can update these over serial.
 float servoMin = 20.0;
 float servoMax = 160.0;
-float manualSpeed = 25.0;       // Degrees/second at full joystick deflection.
+float manualSpeed = 25.0;       // Degrees/second while GUI left/right is held.
 float kp = 0.7;
 float deadband = 0.5;           // Degrees of yaw error ignored in FIXED mode.
 float maxError = 45.0;
 float gyroTrim = 0.0;           // Deg/s, subtracted from the gyro reading.
 const float maxServoRate = 25.0; // Deg/s; prevents abrupt correction steps.
+const float manualNudgeDegrees = 3.0;
 
 float yaw = 0.0;
 float yawRate = 0.0;
@@ -71,11 +74,10 @@ float errorAngle = 0.0;
 bool atLimit = false;
 int joyX = 2048;
 int joyY = 2048;
+int manualJogDirection = 0;     // -1 = left, 0 = stopped, +1 = right.
 
 unsigned long lastControlMs = 0;
 unsigned long lastTelemetryMs = 0;
-bool previousButton = HIGH;
-
 char commandBuffer[96];
 byte commandLength = 0;
 
@@ -150,6 +152,7 @@ void setServo(float requested) {
 }
 
 void enterFixed() {
+  manualJogDirection = 0;
   fixedYaw = yaw;
   fixedServo = servoAngle;
   errorAngle = 0.0;
@@ -162,11 +165,16 @@ void processCommand(const char *rawCommand) {
   command.trim();
 
   if (command == "FIX") enterFixed();
-  else if (command == "MANUAL") { mode = MANUAL; atLimit = false; }
-  else if (command == "DISENGAGE") mode = DISENGAGED;
-  else if (command == "RECENTER") { mode = RECENTER; atLimit = false; }
+  else if (command == "MANUAL") { mode = MANUAL; atLimit = false; manualJogDirection = 0; }
+  else if (command == "DISENGAGE") { mode = DISENGAGED; manualJogDirection = 0; }
+  else if (command == "RECENTER") { mode = RECENTER; atLimit = false; manualJogDirection = 0; }
   else if (command == "ZERO") { yaw = 0.0; fixedYaw = 0.0; }
-  else if (command == "CENTER") { setServo(90.0); }
+  else if (command == "CENTER") { manualJogDirection = 0; setServo(90.0); }
+  else if (command == "JOG LEFT") { mode = MANUAL; atLimit = false; manualJogDirection = -1; }
+  else if (command == "JOG RIGHT") { mode = MANUAL; atLimit = false; manualJogDirection = 1; }
+  else if (command == "JOG STOP") { manualJogDirection = 0; }
+  else if (command == "NUDGE LEFT") { mode = MANUAL; atLimit = false; manualJogDirection = 0; setServo(servoAngle - manualNudgeDegrees); }
+  else if (command == "NUDGE RIGHT") { mode = MANUAL; atLimit = false; manualJogDirection = 0; setServo(servoAngle + manualNudgeDegrees); }
   else if (command.startsWith("SET KP ")) kp = max(0.0f, command.substring(7).toFloat());
   else if (command.startsWith("SET DEADBAND ")) deadband = max(0.0f, command.substring(13).toFloat());
   else if (command.startsWith("SET MANUAL_SPEED ")) manualSpeed = max(0.0f, command.substring(17).toFloat());
@@ -204,22 +212,20 @@ void readSerialCommands() {
 }
 
 void updateControl(float dt) {
-  joyX = analogRead(JOY_X_PIN);
-  joyY = analogRead(JOY_Y_PIN);
+  // Joystick control is disabled for this release. Keep neutral telemetry
+  // values so older GUI fields and CSV logs stay compatible.
+  joyX = 2048;
+  joyY = 2048;
 
   // At +/-250 deg/s sensitivity the MPU6050 produces 131 LSB per deg/s.
   yawRate = readGyroRaw() / 131.0 - gyroTrim;
   yaw += yawRate * dt;
 
-  bool button = digitalRead(JOY_SW_PIN);
-  if (previousButton == HIGH && button == LOW) enterFixed();
-  previousButton = button;
-
   if (mode == MANUAL) {
-    // ESP32 analogRead is normally 0-4095. Joystick X alone controls heading.
-    float normalized = (joyX - 2048) / 2048.0;
-    if (abs(normalized) < 0.08) normalized = 0.0;
-    setServo(servoAngle + normalized * manualSpeed * dt);
+    // Manual movement is driven by GUI JOG commands. LEFT decreases the servo
+    // angle and RIGHT increases it. If your linkage is reversed, swap the signs
+    // here or swap the labels in the GUI.
+    setServo(servoAngle + manualJogDirection * manualSpeed * dt);
     errorAngle = 0.0;
     atLimit = false;
   }
@@ -279,8 +285,6 @@ void sendTelemetry() {
 }
 
 void setup() {
-  pinMode(JOY_SW_PIN, INPUT_PULLUP);
-
   Serial.begin(115200);
   delay(250);
 

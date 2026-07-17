@@ -8,9 +8,9 @@ These are the defaults in `arduino/fishfinder_stabilizer_esp32_s3/fishfinder_sta
 | --- | --- |
 | MPU6050 SDA | GPIO 8 |
 | MPU6050 SCL | GPIO 9 |
-| Joystick VRx | GPIO 1 |
-| Joystick VRy | GPIO 2 |
-| Joystick SW | GPIO 5 |
+| Joystick VRx | Not used in final-test firmware |
+| Joystick VRy | Not used in final-test firmware |
+| Joystick SW | Not used in final-test firmware |
 | Servo signal | GPIO 4 |
 
 Change these constants at the top of the sketch if the physical board labels make another pin more convenient.
@@ -33,7 +33,7 @@ Also connect UBEC negative to ESP32 GND. Without this shared ground, the servo s
   |
   |-- Buck converter set to 5.0 V --> ESP32 5V/VIN, if not using USB
 
-UBEC ground, buck ground, ESP32 ground, joystick ground, and MPU6050 ground are common.
+UBEC ground, buck ground, ESP32 ground, and MPU6050 ground are common.
 ```
 
 For early bench testing, use USB for ESP32 power and the UBEC only for the servo. This keeps servo power noise away from the ESP32 until the servo is known-good.
@@ -42,7 +42,7 @@ For early bench testing, use USB for ESP32 power and the UBEC only for the servo
 
 - Do not feed 7.4 V directly into the ESP32.
 - Do not feed 5 V into the ESP32 `3V3` pin.
-- Power joystick from ESP32 3.3 V so its analog outputs do not exceed ESP32 ADC limits.
+- If the joystick is re-enabled later, power it from ESP32 3.3 V so its analog outputs do not exceed ESP32 ADC limits.
 - Prefer powering MPU6050 from 3.3 V when connected to ESP32 I2C.
 
 ## Bring-up order
@@ -50,8 +50,7 @@ For early bench testing, use USB for ESP32 power and the UBEC only for the servo
 1. ESP32 alone: upload `esp32_s3_smoke_test.ino`.
 2. ESP32 + Serial Monitor: confirm text prints at 115200 baud.
 3. Servo only: upload `esp32_s3_servo_sweep_test.ino`.
-4. Add MPU6050 and joystick.
+4. Add MPU6050.
 5. Upload full stabilizer sketch.
 6. Connect Python GUI.
 7. Test `CENTER`, then `MANUAL`, then `FIXED`.
-

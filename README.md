@@ -10,7 +10,7 @@ This project currently supports:
 - Arduino Uno firmware
 - ESP32-S3 firmware
 - MPU6050 gyro/accelerometer module
-- Analog joystick
+- GUI-controlled manual movement
 - RC servo output
 - CSV telemetry logging
 
@@ -28,6 +28,7 @@ For future maintainers or future Codex sessions, start with:
 
 - `docs/HANDOFF.md`
 - `docs/HARDWARE_CHECKLIST.md`
+- `docs/ESP32_S3_FINAL_WIRING.md`
 - `docs/GITHUB_SETUP.md`
 
 ## Safety and limits
@@ -43,7 +44,7 @@ Important power rules:
 - Tie servo supply ground to controller ground.
 - Do not feed 7.4 V directly into the ESP32.
 - Do not feed 5 V into an ESP32 `3V3` pin.
-- Power joystick analog modules from 3.3 V when connected to ESP32 ADC pins.
+- Power joystick analog modules from 3.3 V if you re-enable them later on ESP32 ADC pins.
 
 ## Repository layout
 
@@ -82,6 +83,17 @@ Important power rules:
 5. Select the controller COM port, leave baud rate at `115200`, then click **Connect**.
 
 Close Arduino Serial Monitor before using the Python GUI. Only one program can own the COM port at a time.
+
+## GUI modes
+
+The app has two views in one program:
+
+- **Simple tester**: friend/tester-facing controls only. Use **LEFT**, **RIGHT**, **LOCK TARGET**, **UNLOCK**, **RESET SERVO**, **ZERO GYRO**, and **RECENTER**.
+- **Dev / tuning**: full telemetry, plots, CSV logging, and tuning sliders.
+
+In Simple tester mode, **LEFT** and **RIGHT** are hold-to-move buttons. The firmware keeps moving while the button is held and stops when it receives `JOG STOP` on release.
+
+**RESET SERVO** currently means "return servo command to center", which is 90 degrees for a standard 0-180 degree RC servo signal.
 
 ## Arduino IDE setup
 
@@ -159,9 +171,9 @@ Default pin map:
 | MPU6050 SCL | GPIO 9 |
 | MPU6050 VCC | 3.3 V recommended |
 | MPU6050 GND | GND |
-| Joystick VRx | GPIO 1 |
-| Joystick VRy | GPIO 2 |
-| Joystick SW | GPIO 5, optional |
+| Joystick VRx | Not used in final-test firmware |
+| Joystick VRy | Not used in final-test firmware |
+| Joystick SW | Not used in final-test firmware |
 | Servo signal | GPIO 4 |
 | Servo power | External 5-6 V servo supply / UBEC |
 | Servo ground | Servo supply ground tied to ESP32 GND |
@@ -179,7 +191,7 @@ Servo wire colors are usually:
 For first bench testing:
 
 1. Power the ESP32-S3 from USB.
-2. Power the MPU6050 and joystick from ESP32 3.3 V and GND.
+2. Power the MPU6050 from ESP32 3.3 V and GND.
 3. Connect servo signal to ESP32 GPIO 4.
 4. Power the DS3245 servo from the UBEC.
 5. Tie UBEC negative / servo ground to ESP32 GND.
@@ -197,9 +209,9 @@ Recommended battery layout:
 1. Upload firmware.
 2. Keep the MPU6050 still for about one second after startup while gyro bias is sampled.
 3. Run the GUI and connect to the correct COM port.
-4. Move the joystick left/right and confirm joystick telemetry changes.
+4. In Simple tester mode, hold **LEFT** or **RIGHT** and confirm the servo command changes.
 5. Press **CENTER SERVO** and confirm servo command goes to 90 degrees.
-6. In **MANUAL MODE**, move joystick and confirm servo command changes.
+6. In **MANUAL MODE**, use GUI left/right controls and confirm servo command changes.
 7. Rotate the MPU6050 by hand and confirm yaw changes.
 8. Use **ZERO GYRO** before a deliberate test.
 9. Aim the servo/head/laser at a wall target.
@@ -210,7 +222,7 @@ Recommended battery layout:
 
 ## Modes and controls
 
-- **MANUAL**: joystick X changes the servo command; yaw remains visible.
+- **MANUAL**: GUI left/right jog commands change the servo command; yaw remains visible.
 - **FIXED**: uses `servo = fixed_servo + Kp * (-(yaw - fixed_yaw))`.
 - **DISENGAGED**: holds the last servo command after a limit or max-error event.
 - **RECENTER**: smoothly drives back to 90 degrees, then enters MANUAL.
@@ -225,7 +237,7 @@ The tuning sliders send their values when released. The active tuning telemetry 
 | --- | --- | --- |
 | Servo minimum angle | Lowest command the software may send to the servo. Set above any mechanical stop. | 20-30 deg |
 | Servo maximum angle | Highest command the software may send to the servo. Set below any mechanical stop. | 150-160 deg |
-| Manual joystick speed | Servo travel speed in MANUAL mode at full joystick deflection. | 20-40 deg/s |
+| Manual speed | Servo travel speed in MANUAL mode while a GUI left/right jog command is held. | 20-40 deg/s |
 | Proportional Kp | Degrees of servo correction requested per degree of yaw error in FIXED mode. | 0.5-1.0 |
 | Deadband degrees | Small yaw errors ignored in FIXED mode. | 0.3-1.0 deg |
 | Max error before disengage | Safety threshold that switches to DISENGAGED. | 30-45 deg |
@@ -267,4 +279,3 @@ Telemetry logs are ignored by Git by default.
 - If the servo moves randomly, check shared ground first.
 - If the servo does nothing with ground connected, run the servo sweep test and measure voltage at the servo.
 - If Arduino IDE can upload but the GUI cannot connect, close Serial Monitor and refresh the GUI port list.
-
