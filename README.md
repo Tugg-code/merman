@@ -60,6 +60,7 @@ Important power rules:
 | `arduino/fishfinder_stabilizer_esp32_s3/` | ESP32-S3 stabilizer firmware |
 | `arduino/esp32_s3_smoke_test/` | Minimal ESP32 upload/serial test |
 | `arduino/esp32_s3_servo_sweep_test/` | Minimal ESP32 servo PWM test |
+| `arduino/esp32_s3_servo_calibrator/` | Interactive ESP32 servo calibration sketch |
 | `docs/` | Handoff, GitHub, and hardware notes |
 
 ## Windows setup
