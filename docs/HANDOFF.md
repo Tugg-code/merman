@@ -11,18 +11,18 @@ This is intentionally a simple bench prototype. It does not use GPS, compass, ma
 ## Current architecture
 
 ```text
-Python tkinter GUI on laptop
+Phone/tablet browser
         |
-        | USB serial, 115200 baud
+        | ESP32 local Wi-Fi AP, http://192.168.4.1
         v
-Microcontroller firmware
+ESP32-S3 firmware + web portal
         |
         | I2C / PWM
         v
 MPU6050 + servo
 ```
 
-The Python GUI does not know or care whether the controller is an Arduino Uno or ESP32-S3 as long as the firmware uses the same serial protocol.
+The Python GUI still works as a dev/debug path over USB serial. The friend/field-test path is now the ESP32's built-in local Wi-Fi web portal.
 
 ## Important files
 
@@ -35,13 +35,29 @@ The Python GUI does not know or care whether the controller is an Arduino Uno or
 | `config.py` | GUI defaults |
 | `requirements.txt` | Python dependencies |
 | `arduino/fishfinder_stabilizer_test/fishfinder_stabilizer_test.ino` | Arduino Uno firmware |
-| `arduino/fishfinder_stabilizer_esp32_s3/fishfinder_stabilizer_esp32_s3.ino` | ESP32-S3 firmware |
+| `arduino/fishfinder_stabilizer_esp32_s3/fishfinder_stabilizer_esp32_s3.ino` | ESP32-S3 firmware with local Wi-Fi web portal |
 | `arduino/esp32_s3_smoke_test/esp32_s3_smoke_test.ino` | Minimal ESP32 upload/serial test |
 | `arduino/esp32_s3_servo_sweep_test/esp32_s3_servo_sweep_test.ino` | Minimal ESP32 servo PWM test |
 | `docs/ESP32_S3_FINAL_WIRING.md` | Final-test ESP32-S3 wiring and pinout |
 | `README.md` | Main user setup and operating instructions |
 
 ## Serial telemetry protocol
+
+The ESP32 web portal uses:
+
+```text
+SSID: Merman-Stabilizer
+Password: merman1234
+URL: http://192.168.4.1
+```
+
+It exposes:
+
+```text
+GET /               web UI
+GET /api/telemetry  JSON telemetry
+GET /api/command?cmd=FIX
+```
 
 Firmware sends newline-delimited JSON at about 20 Hz:
 

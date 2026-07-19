@@ -1,8 +1,9 @@
 /*
   ESP32-S3 fish finder gyro stabilizer proof-of-concept.
 
-  This is the ESP32-S3 version of the Uno bench-test sketch. It keeps the same
-  serial JSON telemetry and command protocol used by the Python GUI.
+  This is the ESP32-S3 field-test sketch. It keeps the same serial JSON
+  telemetry and command protocol used by the Python GUI, and it also serves a
+  password-protected local Wi-Fi web portal for phone/tablet control.
 
   Board target:
     - ESP32-S3 N16R8 dev board using the Arduino-ESP32 board package.
@@ -18,6 +19,8 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <WiFi.h>
+#include <WebServer.h>
 
 #if __has_include(<esp_arduino_version.h>)
   #include <esp_arduino_version.h>
@@ -29,6 +32,13 @@
 const int I2C_SDA_PIN = 1;
 const int I2C_SCL_PIN = 2;
 const int SERVO_PIN = 4;       // Servo signal only; servo power is separate.
+
+// ------------------------- Local Wi-Fi portal -------------------------
+// The ESP32 creates this network directly. No router or internet is required.
+// Password must be at least 8 characters for WPA2.
+const char *AP_SSID = "Merman-Stabilizer";
+const char *AP_PASSWORD = "merman1234";
+WebServer webServer(80);
 
 // If the MPU6050 is lying flat, boat/base heading changes are usually gyro Z.
 // If your mechanical mounting makes the useful rotation axis X or Y, change
@@ -85,6 +95,193 @@ const char *modeName() {
   }
   return "UNKNOWN";
 }
+
+const char INDEX_HTML[] PROGMEM = R"rawliteral(
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Merman Stabilizer</title>
+  <style>
+    :root { color-scheme: dark; --bg:#07111f; --panel:#101d2e; --line:#26364d; --text:#eef5ff; --muted:#9fb2ca; --accent:#4db3ff; --warn:#ffb84d; --bad:#ff5f6d; --ok:#55d889; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--text); }
+    header { padding:14px 16px; border-bottom:1px solid var(--line); background:#0b1728; position:sticky; top:0; z-index:1; }
+    h1 { margin:0; font-size:22px; letter-spacing:.03em; }
+    .tabs { display:flex; gap:8px; margin-top:12px; }
+    .tabs button { flex:1; padding:10px; border:1px solid var(--line); border-radius:10px; background:#132238; color:var(--text); font-size:16px; }
+    .tabs button.active { border-color:var(--accent); background:#173253; }
+    main { padding:14px; max-width:980px; margin:0 auto; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px; box-shadow:0 8px 24px #0004; }
+    .big { font-size:34px; font-weight:700; }
+    .muted { color:var(--muted); }
+    .ok { color:var(--ok); }
+    .bad { color:var(--bad); }
+    .warn { color:var(--warn); }
+    .controls { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+    button.control { min-height:72px; border:0; border-radius:16px; background:#1d385c; color:var(--text); font-size:20px; font-weight:700; touch-action:none; }
+    button.control:active { transform:translateY(1px); background:#255080; }
+    button.lock { background:#145c3b; }
+    button.unlock { background:#5c2d2d; }
+    button.reset { background:#594515; }
+    table { width:100%; border-collapse:collapse; }
+    td { padding:8px 4px; border-bottom:1px solid var(--line); }
+    td:last-child { text-align:right; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .slider-row { display:grid; grid-template-columns:150px 1fr 70px; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); }
+    input[type=range] { width:100%; }
+    .hidden { display:none; }
+    @media (max-width:680px) {
+      .grid, .controls { grid-template-columns:1fr; }
+      .slider-row { grid-template-columns:1fr; }
+      button.control { min-height:62px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Merman Stabilizer</h1>
+    <div class="tabs">
+      <button id="simpleTab" class="active" onclick="showTab('simple')">Simple</button>
+      <button id="devTab" onclick="showTab('dev')">Dev</button>
+    </div>
+  </header>
+  <main>
+    <section id="simple">
+      <div class="card">
+        <div class="muted">Mode</div>
+        <div id="modeBig" class="big">--</div>
+        <div id="summary" class="muted">Waiting for telemetry...</div>
+      </div>
+      <div class="card controls">
+        <button class="control" id="leftBtn">LEFT</button>
+        <button class="control reset" onclick="sendCmd('CENTER')">RESET SERVO</button>
+        <button class="control" id="rightBtn">RIGHT</button>
+        <button class="control lock" onclick="sendCmd('FIX')">LOCK TARGET</button>
+        <button class="control unlock" onclick="sendCmd('DISENGAGE')">UNLOCK</button>
+        <button class="control" onclick="sendCmd('RECENTER')">RECENTER</button>
+        <button class="control" onclick="sendCmd('ZERO')">ZERO GYRO</button>
+        <button class="control" onclick="sendCmd('MANUAL')">MANUAL</button>
+      </div>
+    </section>
+
+    <section id="dev" class="hidden">
+      <div class="grid">
+        <div class="card">
+          <h2>Telemetry</h2>
+          <table>
+            <tr><td>Yaw</td><td id="yaw">--</td></tr>
+            <tr><td>Yaw rate</td><td id="yawRate">--</td></tr>
+            <tr><td>Servo</td><td id="servo">--</td></tr>
+            <tr><td>Target</td><td id="target">--</td></tr>
+            <tr><td>Error</td><td id="error">--</td></tr>
+            <tr><td>MPU</td><td id="mpu">--</td></tr>
+            <tr><td>Limit</td><td id="limit">--</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h2>Dev controls</h2>
+          <div class="controls">
+            <button class="control" onclick="sendCmd('NUDGE LEFT')">NUDGE LEFT</button>
+            <button class="control" onclick="sendCmd('CENTER')">CENTER</button>
+            <button class="control" onclick="sendCmd('NUDGE RIGHT')">NUDGE RIGHT</button>
+            <button class="control lock" onclick="sendCmd('FIX')">FIX</button>
+            <button class="control" onclick="sendCmd('MANUAL')">MANUAL</button>
+            <button class="control unlock" onclick="sendCmd('DISENGAGE')">DISENGAGE</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Tuning</h2>
+        <div class="slider-row"><label>Servo min</label><input id="servoMin" type="range" min="0" max="90" step="1"><span id="servoMinV"></span></div>
+        <div class="slider-row"><label>Servo max</label><input id="servoMax" type="range" min="90" max="180" step="1"><span id="servoMaxV"></span></div>
+        <div class="slider-row"><label>Manual speed</label><input id="manualSpeed" type="range" min="0.1" max="60" step="0.5"><span id="manualSpeedV"></span></div>
+        <div class="slider-row"><label>Kp</label><input id="kp" type="range" min="0" max="4" step="0.1"><span id="kpV"></span></div>
+        <div class="slider-row"><label>Deadband</label><input id="deadband" type="range" min="0" max="15" step="0.5"><span id="deadbandV"></span></div>
+        <div class="slider-row"><label>Max error</label><input id="maxError" type="range" min="5" max="180" step="1"><span id="maxErrorV"></span></div>
+        <div class="slider-row"><label>Gyro trim</label><input id="gyroTrim" type="range" min="-5" max="5" step="0.05"><span id="gyroTrimV"></span></div>
+      </div>
+    </section>
+  </main>
+  <script>
+    let firstTelemetry = true;
+    function showTab(name) {
+      document.getElementById('simple').classList.toggle('hidden', name !== 'simple');
+      document.getElementById('dev').classList.toggle('hidden', name !== 'dev');
+      document.getElementById('simpleTab').classList.toggle('active', name === 'simple');
+      document.getElementById('devTab').classList.toggle('active', name === 'dev');
+    }
+    async function sendCmd(cmd) {
+      try { await fetch('/api/command?cmd=' + encodeURIComponent(cmd)); }
+      catch(e) { console.log(e); }
+    }
+    function holdButton(id, startCmd) {
+      const button = document.getElementById(id);
+      const stop = () => sendCmd('JOG STOP');
+      button.addEventListener('pointerdown', e => { e.preventDefault(); sendCmd(startCmd); });
+      button.addEventListener('pointerup', stop);
+      button.addEventListener('pointercancel', stop);
+      button.addEventListener('pointerleave', stop);
+    }
+    function setupSlider(id, commandBuilder) {
+      const el = document.getElementById(id);
+      const value = document.getElementById(id + 'V');
+      el.addEventListener('input', () => value.textContent = el.value);
+      el.addEventListener('change', () => sendCmd(commandBuilder(el.value)));
+    }
+    function setSlider(id, value) {
+      const el = document.getElementById(id);
+      const label = document.getElementById(id + 'V');
+      if (document.activeElement !== el) el.value = value;
+      label.textContent = el.value;
+    }
+    async function poll() {
+      try {
+        const r = await fetch('/api/telemetry', {cache:'no-store'});
+        const t = await r.json();
+        document.getElementById('modeBig').textContent = t.mode;
+        document.getElementById('summary').textContent =
+          `Servo ${t.servo.toFixed(1)} deg | Yaw ${t.yaw.toFixed(1)} deg | MPU ${t.mpu_ok ? 'OK 0x' + Number(t.mpu_addr).toString(16).toUpperCase() : 'NOT FOUND'} | Limit ${t.limit ? 'YES' : 'OK'}`;
+        document.getElementById('modeBig').className = 'big ' + (t.mode === 'DISENGAGED' ? 'warn' : '');
+        document.getElementById('yaw').textContent = t.yaw.toFixed(2) + ' deg';
+        document.getElementById('yawRate').textContent = t.yaw_rate.toFixed(2) + ' deg/s';
+        document.getElementById('servo').textContent = t.servo.toFixed(1) + ' deg';
+        document.getElementById('target').textContent = t.target.toFixed(2) + ' deg';
+        document.getElementById('error').textContent = t.error.toFixed(2) + ' deg';
+        document.getElementById('mpu').textContent = t.mpu_ok ? 'OK 0x' + Number(t.mpu_addr).toString(16).toUpperCase() : 'NOT FOUND';
+        document.getElementById('mpu').className = t.mpu_ok ? 'ok' : 'bad';
+        document.getElementById('limit').textContent = t.limit ? 'AT LIMIT' : 'OK';
+        document.getElementById('limit').className = t.limit ? 'bad' : 'ok';
+        if (firstTelemetry) {
+          setSlider('servoMin', t.servo_min);
+          setSlider('servoMax', t.servo_max);
+          setSlider('manualSpeed', t.manual_speed);
+          setSlider('kp', t.kp);
+          setSlider('deadband', t.deadband);
+          setSlider('maxError', t.max_error);
+          setSlider('gyroTrim', t.gyro_trim);
+          firstTelemetry = false;
+        }
+      } catch(e) {
+        document.getElementById('summary').textContent = 'Telemetry lost...';
+      }
+    }
+    holdButton('leftBtn', 'JOG LEFT');
+    holdButton('rightBtn', 'JOG RIGHT');
+    setupSlider('servoMin', v => `SET LIMITS ${v} ${document.getElementById('servoMax').value}`);
+    setupSlider('servoMax', v => `SET LIMITS ${document.getElementById('servoMin').value} ${v}`);
+    setupSlider('manualSpeed', v => `SET MANUAL_SPEED ${v}`);
+    setupSlider('kp', v => `SET KP ${v}`);
+    setupSlider('deadband', v => `SET DEADBAND ${v}`);
+    setupSlider('maxError', v => `SET MAX_ERROR ${v}`);
+    setupSlider('gyroTrim', v => `SET GYRO_TRIM ${v}`);
+    setInterval(poll, 250);
+    poll();
+  </script>
+</body>
+</html>
+)rawliteral";
 
 void writeRegister(byte reg, byte value) {
   Wire.beginTransmission(mpuAddr);
@@ -220,6 +417,67 @@ void processCommand(const char *rawCommand) {
   }
 }
 
+String telemetryJson() {
+  String json = "{";
+  json += "\"yaw\":"; json += String(yaw, 2);
+  json += ",\"yaw_rate\":"; json += String(yawRate, 2);
+  json += ",\"mpu_ok\":"; json += (mpuOk ? "true" : "false");
+  json += ",\"mpu_addr\":"; json += String(mpuAddr);
+  json += ",\"servo\":"; json += String(servoAngle, 1);
+  json += ",\"target\":"; json += String(fixedYaw, 2);
+  json += ",\"error\":"; json += String(errorAngle, 2);
+  json += ",\"mode\":\""; json += modeName(); json += "\"";
+  json += ",\"limit\":"; json += (atLimit ? "true" : "false");
+  json += ",\"kp\":"; json += String(kp, 2);
+  json += ",\"deadband\":"; json += String(deadband, 2);
+  json += ",\"manual_speed\":"; json += String(manualSpeed, 2);
+  json += ",\"max_error\":"; json += String(maxError, 1);
+  json += ",\"gyro_trim\":"; json += String(gyroTrim, 2);
+  json += ",\"servo_min\":"; json += String(servoMin, 1);
+  json += ",\"servo_max\":"; json += String(servoMax, 1);
+  json += "}";
+  return json;
+}
+
+void handleRoot() {
+  webServer.send_P(200, "text/html", INDEX_HTML);
+}
+
+void handleTelemetryApi() {
+  webServer.sendHeader("Cache-Control", "no-store");
+  webServer.send(200, "application/json", telemetryJson());
+}
+
+void handleCommandApi() {
+  if (!webServer.hasArg("cmd")) {
+    webServer.send(400, "text/plain", "missing cmd");
+    return;
+  }
+  String command = webServer.arg("cmd");
+  processCommand(command.c_str());
+  webServer.send(200, "application/json", "{\"ok\":true}");
+}
+
+void handleNotFound() {
+  webServer.send(404, "text/plain", "Not found");
+}
+
+void setupWebPortal() {
+  WiFi.mode(WIFI_AP);
+  bool started = WiFi.softAP(AP_SSID, AP_PASSWORD);
+  Serial.print("Wi-Fi AP: "); Serial.println(started ? "started" : "FAILED");
+  Serial.print("SSID: "); Serial.println(AP_SSID);
+  Serial.print("Password: "); Serial.println(AP_PASSWORD);
+  Serial.print("Open: http://"); Serial.println(WiFi.softAPIP());
+
+  webServer.on("/", HTTP_GET, handleRoot);
+  webServer.on("/api/telemetry", HTTP_GET, handleTelemetryApi);
+  webServer.on("/api/command", HTTP_GET, handleCommandApi);
+  webServer.onNotFound(handleNotFound);
+  webServer.begin();
+  Serial.println("Web portal ready.");
+}
+
 void readSerialCommands() {
   while (Serial.available()) {
     char incoming = (char)Serial.read();
@@ -288,20 +546,7 @@ void updateControl(float dt) {
 }
 
 void sendTelemetry() {
-  Serial.print("{\"yaw\":"); Serial.print(yaw, 2);
-  Serial.print(",\"yaw_rate\":"); Serial.print(yawRate, 2);
-  Serial.print(",\"mpu_ok\":"); Serial.print(mpuOk ? "true" : "false");
-  Serial.print(",\"mpu_addr\":"); Serial.print(mpuAddr);
-  Serial.print(",\"servo\":"); Serial.print(servoAngle, 1);
-  Serial.print(",\"target\":"); Serial.print(fixedYaw, 2);
-  Serial.print(",\"error\":"); Serial.print(errorAngle, 2);
-  Serial.print(",\"mode\":\""); Serial.print(modeName());
-  Serial.print("\",\"limit\":"); Serial.print(atLimit ? "true" : "false");
-  Serial.print(",\"kp\":"); Serial.print(kp, 2);
-  Serial.print(",\"deadband\":"); Serial.print(deadband, 2);
-  Serial.print(",\"manual_speed\":"); Serial.print(manualSpeed, 2);
-  Serial.print(",\"gyro_trim\":"); Serial.print(gyroTrim, 2);
-  Serial.println("}");
+  Serial.println(telemetryJson());
 }
 
 void setup() {
@@ -313,6 +558,8 @@ void setup() {
   Serial.print("I2C SDA GPIO "); Serial.println(I2C_SDA_PIN);
   Serial.print("I2C SCL GPIO "); Serial.println(I2C_SCL_PIN);
   Serial.print("Servo GPIO "); Serial.println(SERVO_PIN);
+
+  setupWebPortal();
 
   analogReadResolution(12);
 
@@ -340,6 +587,7 @@ void setup() {
 }
 
 void loop() {
+  webServer.handleClient();
   readSerialCommands();
 
   unsigned long now = millis();

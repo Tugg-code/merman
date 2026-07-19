@@ -9,6 +9,7 @@ This project currently supports:
 - Windows Python GUI using tkinter and matplotlib
 - Arduino Uno firmware
 - ESP32-S3 firmware
+- ESP32-S3 local Wi-Fi web portal
 - MPU6050 gyro/accelerometer module
 - GUI-controlled manual movement
 - RC servo output
@@ -87,7 +88,7 @@ Close Arduino Serial Monitor before using the Python GUI. Only one program can o
 
 ## GUI modes
 
-The app has two views in one program:
+The Windows Python app has two views in one program:
 
 - **Simple tester**: friend/tester-facing controls only. Use **LEFT**, **RIGHT**, **LOCK TARGET**, **UNLOCK**, **RESET SERVO**, **ZERO GYRO**, and **RECENTER**.
 - **Dev / tuning**: full telemetry, plots, CSV logging, and tuning sliders.
@@ -95,6 +96,29 @@ The app has two views in one program:
 In Simple tester mode, **LEFT** and **RIGHT** are hold-to-move buttons. The firmware keeps moving while the button is held and stops when it receives `JOG STOP` on release.
 
 **RESET SERVO** currently means "return servo command to center", which is 90 degrees for a standard 0-180 degree RC servo signal.
+
+## ESP32 local Wi-Fi web portal
+
+The ESP32-S3 firmware also hosts its own password-protected web portal. This is the recommended friend/field-test control method because it does not require the Python GUI, a router, or internet.
+
+Default network:
+
+```text
+SSID: Merman-Stabilizer
+Password: merman1234
+Address: http://192.168.4.1
+```
+
+Use:
+
+1. Power the ESP32 system.
+2. Connect phone/tablet/laptop Wi-Fi to `Merman-Stabilizer`.
+3. Enter password `merman1234`.
+4. Open browser to `http://192.168.4.1`.
+5. Use **Simple** mode for normal testing.
+6. Use **Dev** mode for telemetry and tuning.
+
+The web portal and serial/Python GUI command protocol control the same firmware state machine.
 
 ## Arduino IDE setup
 

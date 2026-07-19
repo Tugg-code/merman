@@ -1,6 +1,6 @@
 # ESP32-S3 final test wiring
 
-This wiring is for the ESP32-S3 N16R8 final-test setup, where manual movement is controlled from the GUI instead of the joystick.
+This wiring is for the ESP32-S3 N16R8 final-test setup, where manual movement is controlled from the ESP32's built-in local Wi-Fi web portal instead of the joystick.
 
 ## Important board-label note
 
@@ -27,11 +27,8 @@ These are the defaults in `arduino/fishfinder_stabilizer_esp32_s3/fishfinder_sta
 | MPU6050 SDA | GPIO 1 | I2C data |
 | MPU6050 SCL | GPIO 2 | I2C clock |
 | Servo signal | GPIO 4 | PWM signal only |
-| Joystick X | Not used | Reserved in firmware only |
-| Joystick Y | Not used | Reserved in firmware only |
-| Joystick switch | Not used | Reserved in firmware only |
 
-Manual left/right movement now comes from GUI serial commands:
+Manual left/right movement now comes from the web portal or serial commands:
 
 ```text
 JOG LEFT
@@ -42,6 +39,25 @@ NUDGE RIGHT
 ```
 
 The firmware now auto-detects the MPU6050 address at either `0x68` or `0x69`.
+
+## Local Wi-Fi web portal
+
+The ESP32 creates its own password-protected Wi-Fi network. No router or internet connection is required.
+
+| Setting | Value |
+| --- | --- |
+| Wi-Fi network / SSID | `Merman-Stabilizer` |
+| Wi-Fi password | `merman1234` |
+| Web address | `http://192.168.4.1` |
+
+Basic use:
+
+1. Power the ESP32 and servo system.
+2. On a phone/tablet/laptop, connect to Wi-Fi network `Merman-Stabilizer`.
+3. Enter password `merman1234`.
+4. Open a browser to `http://192.168.4.1`.
+5. Use the **Simple** tab for normal operation.
+6. Use the **Dev** tab for telemetry and tuning.
 
 ## MPU6050 wiring
 
@@ -107,8 +123,8 @@ ESP32-S3                         MPU6050
 --------                         -------
 3V3    ------------------------> VCC
 GND    ------------------------> GND
-GPIO8  ------------------------> SDA
-GPIO9  ------------------------> SCL
+GPIO1  ------------------------> SDA
+GPIO2  ------------------------> SCL
 
 ESP32-S3                         Level Shifter                         DS3245 Servo
 --------                         -------------                         ------------
