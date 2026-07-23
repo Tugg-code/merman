@@ -47,15 +47,14 @@ const char YAW_AXIS = 'Z';
 
 byte mpuAddr = 0x68;
 
-// ------------------------- Servo PWM -------------------------
-// DS3245-style servos commonly accept 500-2500 us pulses, but if your servo
-// sounds unhappy near the ends, change these to 1000 and 2000 for a gentler
-// first test.
+// ------------------------- Servo pulse output -------------------------
+// The DS3245 responded reliably to manually generated RC servo pulses through
+// the SN74AHCT125 level shifter, while ESP32 LEDC PWM did not. Keep the field
+// firmware on the known-good manual pulse path.
 const int SERVO_PWM_HZ = 50;
-const int SERVO_PWM_BITS = 16;
-const int SERVO_PWM_CHANNEL = 0;       // Used by Arduino-ESP32 2.x API only.
-const int SERVO_MIN_US = 500;
-const int SERVO_MAX_US = 2500;
+const int SERVO_FRAME_US = 1000000 / SERVO_PWM_HZ;
+const int SERVO_MIN_US = 1000;
+const int SERVO_MAX_US = 2000;
 
 enum Mode { MANUAL, FIXED, DISENGAGED, RECENTER };
 Mode mode = MANUAL;
@@ -80,6 +79,9 @@ float errorAngle = 0.0;
 bool atLimit = false;
 bool mpuOk = false;
 int manualJogDirection = 0;     // -1 = left, 0 = stopped, +1 = right.
+int servoPulseUs = 1500;
+bool servoPulseHigh = false;
+unsigned long servoFrameStartUs = 0;
 
 unsigned long lastControlMs = 0;
 unsigned long lastTelemetryMs = 0;
@@ -346,31 +348,37 @@ float calibrateGyro() {
   return (total / (float)samples) / 131.0; // +/-250 deg/s scale.
 }
 
-void setupServoPwm() {
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcAttach(SERVO_PIN, SERVO_PWM_HZ, SERVO_PWM_BITS);
-#else
-  ledcSetup(SERVO_PWM_CHANNEL, SERVO_PWM_HZ, SERVO_PWM_BITS);
-  ledcAttachPin(SERVO_PIN, SERVO_PWM_CHANNEL);
-#endif
+void setupServoPulseOutput() {
+  pinMode(SERVO_PIN, OUTPUT);
+  digitalWrite(SERVO_PIN, LOW);
+  servoFrameStartUs = micros();
 }
 
-void writeServoMicroseconds(int pulseUs) {
+void setServoPulseMicroseconds(int pulseUs) {
   pulseUs = constrain(pulseUs, SERVO_MIN_US, SERVO_MAX_US);
-  const uint32_t maxDuty = (1UL << SERVO_PWM_BITS) - 1;
-  const uint32_t periodUs = 1000000UL / SERVO_PWM_HZ;
-  uint32_t duty = (uint32_t)((pulseUs * (uint64_t)maxDuty) / periodUs);
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcWrite(SERVO_PIN, duty);
-#else
-  ledcWrite(SERVO_PWM_CHANNEL, duty);
-#endif
+  servoPulseUs = pulseUs;
+}
+
+void updateServoPulseOutput() {
+  unsigned long nowUs = micros();
+
+  if (!servoPulseHigh && (unsigned long)(nowUs - servoFrameStartUs) >= SERVO_FRAME_US) {
+    servoFrameStartUs += SERVO_FRAME_US;
+    digitalWrite(SERVO_PIN, HIGH);
+    servoPulseHigh = true;
+    return;
+  }
+
+  if (servoPulseHigh && (unsigned long)(nowUs - servoFrameStartUs) >= (unsigned long)servoPulseUs) {
+    digitalWrite(SERVO_PIN, LOW);
+    servoPulseHigh = false;
+  }
 }
 
 void setServo(float requested) {
   servoAngle = constrain(requested, servoMin, servoMax);
   int pulse = map((int)(servoAngle + 0.5), 0, 180, SERVO_MIN_US, SERVO_MAX_US);
-  writeServoMicroseconds(pulse);
+  setServoPulseMicroseconds(pulse);
 }
 
 void enterFixed() {
@@ -576,7 +584,7 @@ void setup() {
     writeRegister(0x1B, 0x00); // Gyro range: +/-250 deg/s.
   }
 
-  setupServoPwm();
+  setupServoPulseOutput();
   setServo(90.0);
 
   delay(250);
@@ -587,8 +595,11 @@ void setup() {
 }
 
 void loop() {
+  updateServoPulseOutput();
   webServer.handleClient();
+  updateServoPulseOutput();
   readSerialCommands();
+  updateServoPulseOutput();
 
   unsigned long now = millis();
   if (now - lastControlMs >= 10) { // 100 Hz control loop.

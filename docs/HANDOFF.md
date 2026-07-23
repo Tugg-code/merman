@@ -113,6 +113,7 @@ The firmware applies deadband, servo min/max limits, and a correction rate limit
 - GUI/firmware active tuning telemetry was added because the Uno initially was not parsing float commands correctly.
 - ESP32-S3 N16R8 arrived and was added as a supported controller.
 - DS3245 / 45 kg waterproof servo arrived.
+- DS3245 did not respond to ESP32 LEDC/PWM output, but did respond to manually generated servo pulses through an SN74AHCT125 level shifter.
 - User has:
   - ESP32-S3 N16R8
   - DS3245 45 kg waterproof servo
@@ -155,9 +156,9 @@ If the sweep test does not move the servo:
 
 ## Safe next development steps
 
-1. Verify ESP32 servo sweep test.
-2. Once servo moves, return to the ESP32 stabilizer sketch.
-3. Confirm Simple tester mode can command left/right motion from the GUI.
+1. Verify ESP32 servo calibrator uses safe min/center/max pulse values.
+2. Return to the ESP32 stabilizer sketch.
+3. Confirm Simple tester/web portal can command left/right motion.
 4. Confirm `CENTER` moves servo to center.
 5. Confirm `MANUAL` moves servo.
 6. Confirm `FIX` causes opposite movement when rotating the MPU6050.

@@ -26,7 +26,7 @@ These are the defaults in `arduino/fishfinder_stabilizer_esp32_s3/fishfinder_sta
 | --- | --- | --- |
 | MPU6050 SDA | GPIO 1 | I2C data |
 | MPU6050 SCL | GPIO 2 | I2C clock |
-| Servo signal | GPIO 4 | PWM signal only |
+| Servo signal | GPIO 4 | Manual RC servo pulse output through SN74AHCT125 |
 
 Manual left/right movement now comes from the web portal or serial commands:
 
@@ -163,3 +163,15 @@ The scanner currently checks these pairs:
 | GPIO 17 | GPIO 18 | Alternate pair |
 
 Only one pair should be wired at a time.
+
+## Servo signal implementation note
+
+The DS3245/level-shifter setup responded to manually generated RC servo pulses from ESP32 GPIO 4. It did not respond reliably to the earlier ESP32 LEDC/PWM test sketches. The field firmware therefore generates the servo signal manually:
+
+```text
+20 ms frame
+1000-2000 us HIGH pulse
+LOW for the rest of the frame
+```
+
+Keep the full stabilizer firmware and the servo calibrator on this manual pulse path unless there is a strong reason to revisit ESP32 hardware PWM.

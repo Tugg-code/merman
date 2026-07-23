@@ -39,9 +39,7 @@
 #endif
 
 const int SERVO_PIN = 4;
-const int SERVO_PWM_HZ = 50;
-const int SERVO_PWM_BITS = 16;
-const int SERVO_PWM_CHANNEL = 0; // Used by Arduino-ESP32 2.x only.
+const int SERVO_FRAME_US = 20000;
 
 int minUs = 1000;
 int maxUs = 2000;
@@ -50,28 +48,33 @@ int stepUs = 10;
 
 char commandBuffer[80];
 byte commandLength = 0;
+bool servoPulseHigh = false;
+unsigned long servoFrameStartUs = 0;
 
-void setupServoPwm() {
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcAttach(SERVO_PIN, SERVO_PWM_HZ, SERVO_PWM_BITS);
-#else
-  ledcSetup(SERVO_PWM_CHANNEL, SERVO_PWM_HZ, SERVO_PWM_BITS);
-  ledcAttachPin(SERVO_PIN, SERVO_PWM_CHANNEL);
-#endif
+void setupServoPulseOutput() {
+  pinMode(SERVO_PIN, OUTPUT);
+  digitalWrite(SERVO_PIN, LOW);
+  servoFrameStartUs = micros();
 }
 
 void writeServoUs(int pulseUs) {
   currentUs = constrain(pulseUs, minUs, maxUs);
+}
 
-  const uint32_t maxDuty = (1UL << SERVO_PWM_BITS) - 1;
-  const uint32_t periodUs = 1000000UL / SERVO_PWM_HZ;
-  uint32_t duty = (uint32_t)((currentUs * (uint64_t)maxDuty) / periodUs);
+void updateServoPulseOutput() {
+  unsigned long nowUs = micros();
 
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcWrite(SERVO_PIN, duty);
-#else
-  ledcWrite(SERVO_PWM_CHANNEL, duty);
-#endif
+  if (!servoPulseHigh && (unsigned long)(nowUs - servoFrameStartUs) >= SERVO_FRAME_US) {
+    servoFrameStartUs += SERVO_FRAME_US;
+    digitalWrite(SERVO_PIN, HIGH);
+    servoPulseHigh = true;
+    return;
+  }
+
+  if (servoPulseHigh && (unsigned long)(nowUs - servoFrameStartUs) >= (unsigned long)currentUs) {
+    digitalWrite(SERVO_PIN, LOW);
+    servoPulseHigh = false;
+  }
 }
 
 void printStatus() {
@@ -171,7 +174,7 @@ void setup() {
   Serial.begin(115200);
   delay(1500);
 
-  setupServoPwm();
+  setupServoPulseOutput();
   writeServoUs(1500);
 
   Serial.println();
@@ -182,5 +185,6 @@ void setup() {
 }
 
 void loop() {
+  updateServoPulseOutput();
   readSerialCommands();
 }
