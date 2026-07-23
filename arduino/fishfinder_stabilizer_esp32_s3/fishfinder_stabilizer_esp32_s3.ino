@@ -52,7 +52,6 @@ byte mpuAddr = 0x68;
 // the SN74AHCT125 level shifter, while ESP32 LEDC PWM did not. Keep the field
 // firmware on the known-good manual pulse path.
 const int SERVO_PWM_HZ = 50;
-const int SERVO_FRAME_US = 1000000 / SERVO_PWM_HZ;
 const int SERVO_MIN_US = 1000;
 const int SERVO_MAX_US = 2000;
 
@@ -79,14 +78,14 @@ float errorAngle = 0.0;
 bool atLimit = false;
 bool mpuOk = false;
 int manualJogDirection = 0;     // -1 = left, 0 = stopped, +1 = right.
-int servoPulseUs = 1500;
-bool servoPulseHigh = false;
-unsigned long servoFrameStartUs = 0;
+volatile int servoPulseUs = 1500;
 
 unsigned long lastControlMs = 0;
 unsigned long lastTelemetryMs = 0;
 char commandBuffer[96];
 byte commandLength = 0;
+
+void servoPulseTask(void *parameter);
 
 const char *modeName() {
   switch (mode) {
@@ -351,7 +350,15 @@ float calibrateGyro() {
 void setupServoPulseOutput() {
   pinMode(SERVO_PIN, OUTPUT);
   digitalWrite(SERVO_PIN, LOW);
-  servoFrameStartUs = micros();
+  xTaskCreatePinnedToCore(
+    servoPulseTask,
+    "servo_pulse",
+    2048,
+    nullptr,
+    3,
+    nullptr,
+    1
+  );
 }
 
 void setServoPulseMicroseconds(int pulseUs) {
@@ -359,19 +366,16 @@ void setServoPulseMicroseconds(int pulseUs) {
   servoPulseUs = pulseUs;
 }
 
-void updateServoPulseOutput() {
-  unsigned long nowUs = micros();
+void servoPulseTask(void *parameter) {
+  (void)parameter;
+  TickType_t lastWake = xTaskGetTickCount();
 
-  if (!servoPulseHigh && (unsigned long)(nowUs - servoFrameStartUs) >= SERVO_FRAME_US) {
-    servoFrameStartUs += SERVO_FRAME_US;
+  for (;;) {
+    int pulseUs = servoPulseUs;
     digitalWrite(SERVO_PIN, HIGH);
-    servoPulseHigh = true;
-    return;
-  }
-
-  if (servoPulseHigh && (unsigned long)(nowUs - servoFrameStartUs) >= (unsigned long)servoPulseUs) {
+    delayMicroseconds(pulseUs);
     digitalWrite(SERVO_PIN, LOW);
-    servoPulseHigh = false;
+    vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(1000 / SERVO_PWM_HZ));
   }
 }
 
@@ -595,11 +599,8 @@ void setup() {
 }
 
 void loop() {
-  updateServoPulseOutput();
   webServer.handleClient();
-  updateServoPulseOutput();
   readSerialCommands();
-  updateServoPulseOutput();
 
   unsigned long now = millis();
   if (now - lastControlMs >= 10) { // 100 Hz control loop.
